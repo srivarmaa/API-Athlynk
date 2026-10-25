@@ -1,0 +1,5 @@
+# Shell scripts must keep LF or they fail on Linux/macOS (CI, containers).
+mvnw text eol=lf
+*.sh text eol=lf
+# Windows wrappers keep CRLF.
+*.cmd text eol=crlf

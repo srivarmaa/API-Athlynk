@@ -1,0 +1,47 @@
+# Local development infrastructure for Athlynk.
+#
+#   docker compose up -d
+#
+# Postgres runs infra/db/bootstrap-roles.sql on FIRST init only (empty volume).
+# To re-run it: `docker compose down -v` (destroys local data), then up again.
+#
+# Flyway connects as athlynk_owner; the API connects as athlynk_app;
+# pg_dump/pg_restore connect as athlynk_backup (infra/db/PORTABILITY-DRILL.md).
+# An existing volume predates athlynk_backup: re-run bootstrap-roles.sql by
+# hand (see that file's header) rather than `down -v`.
+# The passwords below are local-dev defaults; override via a root .env file.
+# Image tags are pinned exactly (DEVELOPMENT.md §10); bump them deliberately.
+
+services:
+  postgres:
+    image: postgres:18.6-trixie
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: athlynk
+      # Read by bootstrap-roles.sql via psql \getenv.
+      ATHLYNK_DB_MIGRATION_PASSWORD: ${ATHLYNK_DB_MIGRATION_PASSWORD:-athlynk_owner_dev}
+      ATHLYNK_DB_APP_PASSWORD: ${ATHLYNK_DB_APP_PASSWORD:-athlynk_app_dev}
+      # Dump/restore only (infra/db/PORTABILITY-DRILL.md). Never the API's role.
+      ATHLYNK_DB_BACKUP_PASSWORD: ${ATHLYNK_DB_BACKUP_PASSWORD:-athlynk_backup_dev}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # The postgres 18 image keeps PGDATA under /var/lib/postgresql/18/docker;
+      # the volume is mounted at the parent, as the 18.x image expects.
+      - pgdata:/var/lib/postgresql
+      - ./infra/db/bootstrap-roles.sql:/docker-entrypoint-initdb.d/10-bootstrap-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d athlynk"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP  (SMTP_HOST=localhost, SMTP_PORT=1025)
+      - "127.0.0.1:8025:8025"   # Web UI  http://localhost:8025
+
+volumes:
+  pgdata:
